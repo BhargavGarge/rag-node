@@ -1,9 +1,9 @@
-import { Router } from 'express';
-import { fetchRepo, parseRepoUrl } from '../ingestion/githubFetcher.js';
-import { chunkFiles } from '../ingestion/chunker.js';
-import { embedChunks } from '../ingestion/embedder.js';
-import { clearRepo, saveChunks, listRepos } from '../ingestion/store.js';
-import { openSse } from '../utils/sse.js';
+import { Router } from "express";
+import { fetchRepo, parseRepoUrl } from "../ingestion/githubFetcher.js";
+import { chunkFiles } from "../ingestion/chunker.js";
+import { embedChunks } from "../ingestion/embedder.js";
+import { clearRepo, saveChunks, listRepos } from "../ingestion/store.js";
+import { openSse } from "../utils/sse.js";
 
 export const indexRouter = Router();
 
@@ -19,7 +19,7 @@ async function runIngestion(repoUrl, onStage = () => {}) {
     onStage({
       stage: update.stage,
       message:
-        update.stage === 'tree'
+        update.stage === "tree"
           ? `Listing files in ${slug}...`
           : `Fetched ${update.done}/${update.total} files`,
       done: update.done,
@@ -27,19 +27,33 @@ async function runIngestion(repoUrl, onStage = () => {}) {
     });
   });
 
-  onStage({ stage: 'chunk', message: `Chunking ${files.length} files...` });
+  onStage({ stage: "chunk", message: `Chunking ${files.length} files...` });
   const chunks = chunkFiles(files);
 
-  onStage({ stage: 'embed', message: `Embedding ${chunks.length} chunks...`, total: chunks.length });
+  onStage({
+    stage: "embed",
+    message: `Embedding ${chunks.length} chunks...`,
+    total: chunks.length,
+  });
   await embedChunks(chunks, ({ done, total }) => {
-    onStage({ stage: 'embed', message: `Embedded ${done}/${total} chunks`, done, total });
+    onStage({
+      stage: "embed",
+      message: `Embedded ${done}/${total} chunks`,
+      done,
+      total,
+    });
   });
 
-  onStage({ stage: 'store', message: 'Writing to the vector store...' });
+  onStage({ stage: "store", message: "Writing to the vector store..." });
   // Re-indexing replaces a repo wholesale — there is no per-user isolation.
   await clearRepo(slug);
   await saveChunks(slug, chunks, ({ done, total }) => {
-    onStage({ stage: 'store', message: `Saved ${done}/${total} chunks`, done, total });
+    onStage({
+      stage: "store",
+      message: `Saved ${done}/${total} chunks`,
+      done,
+      total,
+    });
   });
 
   return {
@@ -50,7 +64,7 @@ async function runIngestion(repoUrl, onStage = () => {}) {
   };
 }
 
-indexRouter.get('/repos', async (_req, res, next) => {
+indexRouter.get("/repos", async (_req, res, next) => {
   try {
     res.json({ repos: await listRepos() });
   } catch (err) {
@@ -58,7 +72,7 @@ indexRouter.get('/repos', async (_req, res, next) => {
   }
 });
 
-indexRouter.post('/index', async (req, res, next) => {
+indexRouter.post("/index", async (req, res, next) => {
   try {
     res.json(await runIngestion(req.body?.repo_url));
   } catch (err) {
@@ -67,17 +81,17 @@ indexRouter.post('/index', async (req, res, next) => {
 });
 
 /** Same pipeline, but streams progress — indexing a large repo takes minutes. */
-indexRouter.post('/index/stream', async (req, res) => {
+indexRouter.post("/index/stream", async (req, res) => {
   const send = openSse(res);
 
   try {
     const result = await runIngestion(req.body?.repo_url, (update) =>
-      send({ type: 'progress', ...update }),
+      send({ type: "progress", ...update }),
     );
-    send({ type: 'done', content: result });
+    send({ type: "done", content: result });
   } catch (err) {
-    console.error('Index failed:', err);
-    send({ type: 'error', content: err.message });
+    console.error("Index failed:", err);
+    send({ type: "error", content: err.message });
   } finally {
     res.end();
   }
